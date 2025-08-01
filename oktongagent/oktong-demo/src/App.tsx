@@ -54,9 +54,11 @@ export interface TastingNote {
     createdAt: number;
 }
 
-// 사용자 데이터 모델 정의
+// 사용자 데이터 모델 정의 (username 및 password 추가)
 export interface User {
     id: string;
+    username: string; // 사용자 이름 (로그인용)
+    password: string; // 비밀번호 (데모용: 평문 저장, 실제는 해싱 필수!)
     preferences: UserPreferences;
     interactionHistory: UserInteractionHistory;
     evaluatedWhiskeyIds: string[]; // 사용자가 평가한 TastingNote ID 목록
@@ -94,9 +96,10 @@ class DatabaseService {
         ];
 
         this.users = [
-            { id: 'user001', preferences: { bodyPreference: 3, richnessPreference: 4, smokinessPreference: 5, sweetnessPreference: 1, minPreferredPrice: 50000, maxPreferredPrice: 200000, experienceLevel: '중급', flavorKeywords: ['피트', '스모키'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w001', viewedAt: Date.now() - 3600000 }], likedWhiskeys: ['w001'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] },
-            { id: 'user002', preferences: { bodyPreference: 4, richnessPreference: 3, smokinessPreference: 1, sweetnessPreference: 5, minPreferredPrice: 0, maxPreferredPrice: 100000, experienceLevel: '초보', flavorKeywords: ['바닐라', '꿀'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w002', viewedAt: Date.now() - 7200000 }, { whiskeyId: 'w007', viewedAt: Date.now() - 1800000 }], likedWhiskeys: ['w002'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] },
-            { id: 'user003', preferences: { bodyPreference: 5, richnessPreference: 5, smokinessPreference: 2, sweetnessPreference: 3, minPreferredPrice: 150000, maxPreferredPrice: 500000, experienceLevel: '전문가', flavorKeywords: ['쉐리', '과일'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w003', viewedAt: Date.now() - 5400000 }], likedWhiskeys: ['w003'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] }
+            // username 및 password 추가
+            { id: 'user001', username: 'user001', password: 'password123', preferences: { bodyPreference: 3, richnessPreference: 4, smokinessPreference: 5, sweetnessPreference: 1, minPreferredPrice: 50000, maxPreferredPrice: 200000, experienceLevel: '중급', flavorKeywords: ['피트', '스모키'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w001', viewedAt: Date.now() - 3600000 }], likedWhiskeys: ['w001'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] },
+            { id: 'user002', username: 'user002', password: 'password123', preferences: { bodyPreference: 4, richnessPreference: 3, smokinessPreference: 1, sweetnessPreference: 5, minPreferredPrice: 0, maxPreferredPrice: 100000, experienceLevel: '초보', flavorKeywords: ['바닐라', '꿀'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w002', viewedAt: Date.now() - 7200000 }, { whiskeyId: 'w007', viewedAt: Date.now() - 1800000 }], likedWhiskeys: ['w002'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] },
+            { id: 'user003', username: 'user003', password: 'password123', preferences: { bodyPreference: 5, richnessPreference: 5, smokinessPreference: 2, sweetnessPreference: 3, minPreferredPrice: 150000, maxPreferredPrice: 500000, experienceLevel: '전문가', flavorKeywords: ['쉐리', '과일'] }, interactionHistory: { viewedWhiskeys: [{ whiskeyId: 'w003', viewedAt: Date.now() - 5400000 }], likedWhiskeys: ['w003'], dislikedWhiskeys: [], searches: [] }, evaluatedWhiskeyIds: [] }
         ];
 
         this.tastingNotes = [
@@ -111,6 +114,10 @@ class DatabaseService {
     getAllWhiskeys(): Whiskey[] { return this.whiskeys; }
     getWhiskeyById(id: string): Whiskey | undefined { return this.whiskeys.find(w => w.id === id); }
     getUserById(id: string): User | undefined { return this.users.find(u => u.id === id); }
+    // 사용자 이름으로 사용자 찾기 추가
+    findUserByUsername(username: string): User | undefined {
+        return this.users.find(u => u.username === username);
+    }
     updateUser(userId: string, updateData: Partial<User>): User | undefined {
         const userIndex = this.users.findIndex(u => u.id === userId);
         if (userIndex > -1) {
@@ -124,7 +131,16 @@ class DatabaseService {
         }
         return undefined;
     }
-    addUser(newUser: User): User { this.users.push(newUser); return newUser; }
+    // 새로운 사용자 등록 추가
+    registerUser(newUser: User): User {
+        // 실제 앱에서는 여기서 사용자 이름 중복 확인, 비밀번호 해싱 등을 수행해야 합니다.
+        if (this.findUserByUsername(newUser.username)) {
+            throw new Error("이미 존재하는 사용자 이름입니다.");
+        }
+        this.users.push(newUser);
+        return newUser;
+    }
+
     getAllTastingNotes(): TastingNote[] { return this.tastingNotes; }
     getTastingNotesByWhiskeyId(whiskeyId: string): TastingNote[] { return this.tastingNotes.filter(tn => tn.whiskeyId === whiskeyId); }
     getTastingNotesByUserId(userId: string): TastingNote[] { return this.tastingNotes.filter(tn => tn.userId === userId); }
@@ -145,6 +161,18 @@ class DatabaseService {
         }
         return undefined;
     }
+    // 평가 노트 삭제 추가
+    deleteTastingNote(noteId: string, userId: string): boolean {
+        const initialLength = this.tastingNotes.length;
+        this.tastingNotes = this.tastingNotes.filter(note => note.id !== noteId);
+        
+        const user = this.getUserById(userId);
+        if (user) {
+            user.evaluatedWhiskeyIds = user.evaluatedWhiskeyIds.filter(id => id !== noteId);
+            this.updateUser(userId, { evaluatedWhiskeyIds: user.evaluatedWhiskeyIds });
+        }
+        return this.tastingNotes.length < initialLength; // 삭제 성공 여부 반환
+    }
 }
 const dbService = DatabaseService.getInstance();
 
@@ -158,7 +186,6 @@ interface RecommendationResult {
 // 필터링 옵션 인터페이스
 interface WhiskeyFilterOptions {
     type?: Whiskey['type'];
-    // priceRange?: Whiskey['priceRange']; // 가격대 카테고리 필터 제거
     minPrice?: number; // 숫자 범위 필터링을 위한 최소 가격
     maxPrice?: number; // 숫자 범위 필터링을 위한 최대 가격
     country?: string;
@@ -171,8 +198,6 @@ type SortOrder = 'asc' | 'desc';
 
 class OktongRecommendationService {
     constructor() {}
-
-    // getPriceValue 헬퍼 함수는 더 이상 필요 없으므로 제거
 
     async saveUserPreferences(userId: string, preferences: UserPreferences): Promise<User | null> {
         const user = dbService.getUserById(userId);
@@ -258,7 +283,7 @@ class OktongRecommendationService {
         return result;
     }
 
-    async getRecentlyViewedWhiskeys(userId: string): Promise<{ whiskey: Whiskey; viewedAt: number }[]> {
+    async getRecentlyViewedWhiskies(userId: string): Promise<{ whiskey: Whiskey; viewedAt: number }[]> {
         const user = dbService.getUserById(userId);
         if (!user) { throw new Error("사용자 정보를 찾을 수 없습니다."); }
         let viewedHistory = user.interactionHistory.viewedWhiskeys;
@@ -277,7 +302,6 @@ class OktongRecommendationService {
     async filterWhiskies(whiskies: Whiskey[], filters: WhiskeyFilterOptions): Promise<Whiskey[]> {
         let filtered = [...whiskies];
         if (filters.type) { filtered = filtered.filter(w => w.type === filters.type); }
-        // if (filters.priceRange) { filtered = filtered.filter(w => w.priceRange === filters.priceRange); } // 가격대 카테고리 필터 제거
         if (filters.country) { filtered = filtered.filter(w => w.country === filters.country); }
         if (filters.flavorKeywords && filters.flavorKeywords.length > 0) { filtered = filtered.filter(w => filters.flavorKeywords!.some((keyword: string) => w.flavorProfile.includes(keyword))); }
         // 숫자 범위 가격 필터링
@@ -320,6 +344,14 @@ class OktongRecommendationService {
         if (rating < 1 || rating > 5 || bodyRating < 0 || bodyRating > 5 || richnessRating < 0 || richnessRating > 5 || smokinessRating < 0 || smokinessRating > 5 || sweetnessRating < 0 || sweetnessRating > 5) { throw new Error("유효하지 않은 평가 점수입니다. 점수는 0-5 (총점은 1-5) 범위여야 합니다."); }
         const newNote: TastingNote = { id: `tn${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, userId, whiskeyId, rating, reviewText, bodyRating, richnessRating, smokinessRating, sweetnessRating, createdAt: Date.now() };
         try { dbService.addTastingNote(newNote); return newNote; } catch (error) { throw new Error("평가 노트를 작성할 수 없습니다. 오류가 발생하였습니다."); }
+    }
+
+    async deleteEvaluatedWhiskey(userId: string, tastingNoteId: string): Promise<boolean> {
+        const success = dbService.deleteTastingNote(tastingNoteId, userId);
+        if (!success) {
+            throw new Error("평가 노트를 삭제하는 데 실패했습니다. 다시 시도해주세요.");
+        }
+        return success;
     }
 
     async getSimilarWhiskies(whiskeyId: string, userId?: string): Promise<Whiskey[]> {
@@ -387,37 +419,46 @@ const oktongService = new OktongRecommendationService();
 // --- UI 컴포넌트 ---
 const LoadingSpinner: React.FC = () => (
     <div className="flex justify-center items-center py-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        <p className="ml-3 text-gray-700">로딩 중...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div> {/* 스피너 색상 변경 */}
+        <p className="ml-3 text-stone-700">로딩 중...</p> {/* 텍스트 색상 변경 */}
     </div>
 );
 
-const WhiskeyCard: React.FC<{ whiskey: Whiskey; onClick?: (whiskeyId: string) => void; showReason?: boolean; reason?: string }> = ({ whiskey, onClick, showReason = false, reason }) => (
+const WhiskeyCard: React.FC<{ whiskey: Whiskey; onClick?: (whiskeyId: string) => void; showReason?: boolean; reason?: string; onDelete?: (tastingNoteId: string) => void; tastingNoteId?: string }> = ({ whiskey, onClick, showReason = false, reason, onDelete, tastingNoteId }) => (
     <div
-        className="bg-white rounded-lg shadow-md p-4 m-2 flex flex-col items-center border border-gray-200 hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+        className="bg-white rounded-xl shadow-lg p-4 m-2 flex flex-col items-center border border-stone-200 hover:shadow-xl transition-shadow duration-300 cursor-pointer transform hover:scale-105 relative" /* 그림자, 모서리, 호버 효과 강화, relative 추가 */
         onClick={() => onClick && onClick(whiskey.id)}
     >
         <img
             src={whiskey.imageUrl || `https://placehold.co/100x150/f0f0f0/333333?text=${whiskey.name.substring(0, 5)}`}
             alt={whiskey.name}
-            className="w-24 h-36 object-cover rounded-md mb-3"
+            className="w-28 h-40 object-cover rounded-md mb-3 shadow-md" /* 이미지 크기, 그림자 */
             onError={(e) => { e.currentTarget.src = `https://placehold.co/150x250/f0f0f0/333333?text=${whiskey.name.substring(0, 5)}`; }}
         />
-        <h3 className="text-lg font-semibold text-gray-800 text-center mb-1">{whiskey.name}</h3>
-        <p className="text-sm text-gray-600 text-center mb-2">{whiskey.type} | {whiskey.price.toLocaleString()}원</p> {/* 가격 표시를 숫자로 변경 */}
+        <h3 className="text-xl font-bold text-stone-800 text-center mb-1">{whiskey.name}</h3> {/* 폰트 크기, 색상 */}
+        <p className="text-base text-stone-600 text-center mb-2">{whiskey.type} | {whiskey.price.toLocaleString()}원</p> {/* 폰트 크기, 색상 */}
         {showReason && reason && (
-            <div className="text-sm text-gray-700 text-center mt-2">
-                <p className="font-medium">추천 이유:</p>
-                <p className="text-sm text-gray-600">{reason}</p>
+            <div className="text-sm text-stone-700 text-center mt-2 p-2 bg-stone-50 rounded-lg border border-stone-100"> {/* 배경, 테두리 추가 */}
+                <p className="font-semibold text-stone-800">추천 이유:</p>
+                <p className="text-sm text-stone-600">{reason}</p>
             </div>
         )}
         <div className="mt-3 flex flex-wrap justify-center">
             {whiskey.flavorProfile.map((flavor, index) => (
-                <span key={index} className="bg-blue-100 text-blue-800 text-xs font-medium mr-1 mb-1 px-2.5 py-0.5 rounded-full">
+                <span key={index} className="bg-amber-100 text-amber-800 text-xs font-medium mr-1 mb-1 px-2.5 py-0.5 rounded-full shadow-sm"> {/* 색상 변경, 그림자 */}
                     {flavor}
                 </span>
             ))}
         </div>
+        {onDelete && tastingNoteId && (
+            <button
+                onClick={(e) => { e.stopPropagation(); onDelete(tastingNoteId); }} // 이벤트 버블링 방지
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold opacity-80 hover:opacity-100 transition-opacity"
+                title="평가 노트 삭제"
+            >
+                &times;
+            </button>
+        )}
     </div>
 );
 
@@ -477,82 +518,84 @@ const WhiskeyDetailModal: React.FC<{ whiskey: Whiskey | null; onClose: () => voi
     if (!whiskey) return null;
 
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
-                <button onClick={onClose} className="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-2xl font-bold">
+        <div className="fixed inset-0 bg-stone-900 bg-opacity-75 flex justify-center items-center z-50 p-4"> {/* 배경색 변경 */}
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto relative border border-stone-200"> {/* 그림자, 테두리 */}
+                <button onClick={onClose} className="absolute top-3 right-3 text-stone-500 hover:text-stone-800 text-2xl font-bold"> {/* 텍스트 색상 */}
                     &times;
                 </button>
-                <h2 className="text-2xl font-bold text-indigo-700 mb-4">{whiskey.name} 상세 정보</h2>
+                <h2 className="text-3xl font-bold text-amber-700 mb-4">{whiskey.name} 상세 정보</h2> {/* 제목 색상 */}
                 <div className="flex flex-col md:flex-row items-center md:items-start mb-4">
                     <img
                         src={whiskey.imageUrl || `https://placehold.co/150x250/f0f0f0/333333?text=${whiskey.name.substring(0, 5)}`}
                         alt={whiskey.name}
-                        className="w-32 h-48 object-cover rounded-md mr-4 mb-4 md:mb-0"
+                        className="w-36 h-52 object-cover rounded-md mr-6 mb-4 md:mb-0 shadow-md" /* 이미지 크기, 그림자 */
                         onError={(e) => { e.currentTarget.src = `https://placehold.co/150x250/f0f0f0/333333?text=${whiskey.name.substring(0, 5)}`; }}
                     />
-                    <div className="flex-1">
-                        <p className="text-gray-700 mb-2"><strong>증류소:</strong> {whiskey.distillery || '정보 없음'}</p>
-                        <p className="text-gray-700 mb-2"><strong>국가:</strong> {whiskey.country || '정보 없음'}</p>
-                        <p className="text-gray-700 mb-2"><strong>종류:</strong> {whiskey.type || '정보 없음'}</p>
-                        <p className="text-gray-700 mb-2"><strong>숙성 연수:</strong> {whiskey.age ? `${whiskey.age}년` : '정보 없음'}</p>
-                        <p className="text-gray-700 mb-2"><strong>가격:</strong> {whiskey.price.toLocaleString()}원</p> {/* 가격 표시를 숫자로 변경 */}
-                        <p className="text-gray-700 mb-2"><strong>맛/향 프로필:</strong> {whiskey.flavorProfile.length > 0 ? whiskey.flavorProfile.join(', ') : '정보 없음'}</p>
-                        <p className="text-gray-700 mb-2"><strong>설명:</strong> {whiskey.description || '정보 없음'}</p>
+                    <div className="flex-1 text-stone-700 text-lg space-y-2"> {/* 텍스트 색상, 간격 */}
+                        <p><strong>증류소:</strong> {whiskey.distillery || '정보 없음'}</p>
+                        <p><strong>국가:</strong> {whiskey.country || '정보 없음'}</p>
+                        <p><strong>종류:</strong> {whiskey.type || '정보 없음'}</p>
+                        <p><strong>숙성 연수:</strong> {whiskey.age ? `${whiskey.age}년` : '정보 없음'}</p>
+                        <p><strong>가격:</strong> {whiskey.price.toLocaleString()}원</p>
+                        <p><strong>맛/향 프로필:</strong> {whiskey.flavorProfile.length > 0 ? whiskey.flavorProfile.join(', ') : '정보 없음'}</p>
+                        <p><strong>설명:</strong> {whiskey.description || '정보 없음'}</p>
                     </div>
                 </div>
 
-                <div className="flex justify-around mt-4">
+                <div className="flex justify-around mt-6 space-x-4"> {/* 간격 조정 */}
                     <button
                         onClick={() => setShowTastingNoteForm(!showTastingNoteForm)}
-                        className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors shadow-md"
+                        className="bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition-colors shadow-md transform hover:scale-105 font-semibold text-lg" /* 색상, 패딩, 폰트 */
                     >
                         평가 노트 작성 {showTastingNoteForm ? '닫기' : '열기'}
                     </button>
                     <button
                         onClick={fetchSimilarWhiskies}
-                        className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors shadow-md"
+                        className="bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors shadow-md transform hover:scale-105 font-semibold text-lg" /* 색상, 패딩, 폰트 */
                     >
                         유사한 위스키 보기
                     </button>
                 </div>
 
                 {showTastingNoteForm && (
-                    <div className="mt-6 p-4 border border-gray-300 rounded-lg bg-gray-50">
-                        <h3 className="text-xl font-semibold text-gray-800 mb-3">평가 노트 작성</h3>
-                        <div className="mb-3">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">총점 (1-5):</label>
-                            <input type="number" min="1" max="5" value={rating} onChange={(e) => setRating(parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md" />
+                    <div className="mt-8 p-6 border border-stone-300 rounded-xl bg-stone-50 shadow-inner"> {/* 배경, 테두리, 그림자 */}
+                        <h3 className="text-xl font-semibold text-stone-800 mb-4">평가 노트 작성</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* 그리드 레이아웃 */}
+                            <div className="col-span-1">
+                                <label className="block text-stone-700 text-sm font-bold mb-1">총점 (1-5):</label>
+                                <input type="number" min="1" max="5" value={rating} onChange={(e) => setRating(parseInt(e.target.value))}
+                                    className="w-full p-2 border border-stone-300 rounded-lg bg-white text-stone-700 focus:ring-amber-500 focus:border-amber-500" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-stone-700 text-sm font-bold mb-1">바디감 (0-5):</label>
+                                <input type="number" min="0" max="5" value={bodyRating} onChange={(e) => setBodyRating(parseInt(e.target.value))}
+                                    className="w-full p-2 border border-stone-300 rounded-lg bg-white text-stone-700 focus:ring-amber-500 focus:border-amber-500" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-stone-700 text-sm font-bold mb-1">풍미 (0-5):</label>
+                                <input type="number" min="0" max="5" value={richnessRating} onChange={(e) => setRichnessRating(parseInt(e.target.value))}
+                                    className="w-full p-2 border border-stone-300 rounded-lg bg-white text-stone-700 focus:ring-amber-500 focus:border-amber-500" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-stone-700 text-sm font-bold mb-1">스모키함 (0-5):</label>
+                                <input type="number" min="0" max="5" value={smokinessRating} onChange={(e) => setSmokinessRating(parseInt(e.target.value))}
+                                    className="w-full p-2 border border-stone-300 rounded-lg bg-white text-stone-700 focus:ring-amber-500 focus:border-amber-500" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-stone-700 text-sm font-bold mb-1">단맛 (0-5):</label>
+                                <input type="number" min="0" max="5" value={sweetnessRating} onChange={(e) => setSweetnessRating(parseInt(e.target.value))}
+                                    className="w-full p-2 border border-stone-300 rounded-lg bg-white text-stone-700 focus:ring-amber-500 focus:border-amber-500" />
+                            </div>
                         </div>
-                        <div className="mb-3">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">바디감 (0-5):</label>
-                            <input type="number" min="0" max="5" value={bodyRating} onChange={(e) => setBodyRating(parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md" />
-                        </div>
-                        <div className="mb-3">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">풍미 (0-5):</label>
-                            <input type="number" min="0" max="5" value={richnessRating} onChange={(e) => setRichnessRating(parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md" />
-                        </div>
-                        <div className="mb-3">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">스모키함 (0-5):</label>
-                            <input type="number" min="0" max="5" value={smokinessRating} onChange={(e) => setSmokinessRating(parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md" />
-                        </div>
-                        <div className="mb-3">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">단맛 (0-5):</label>
-                            <input type="number" min="0" max="5" value={sweetnessRating} onChange={(e) => setSweetnessRating(parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md" />
-                        </div>
-                        <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-bold mb-1">코멘트:</label>
+                        <div className="mt-4">
+                            <label className="block text-stone-700 text-sm font-bold mb-1">코멘트:</label>
                             <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)}
-                                className="w-full p-2 border rounded-md resize-y min-h-[60px]" rows={3}></textarea>
+                                className="w-full p-3 border border-stone-300 rounded-lg bg-white text-stone-700 resize-y min-h-[80px] focus:ring-2 focus:ring-amber-500 focus:border-amber-500" rows={3}></textarea>
                         </div>
-                        {submitError && <p className="text-red-500 text-sm mb-3">{submitError}</p>}
+                        {submitError && <p className="text-red-500 text-sm mt-3 text-center">{submitError}</p>}
                         <button
                             onClick={handleTastingNoteSubmit}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-md disabled:opacity-50"
+                            className="w-full bg-amber-600 text-white px-6 py-3 rounded-lg hover:bg-amber-700 transition-colors shadow-md disabled:opacity-50 transform hover:scale-105 font-semibold text-lg mt-6"
                             disabled={submitLoading}
                         >
                             {submitLoading ? '저장 중...' : '저장'}
@@ -561,11 +604,11 @@ const WhiskeyDetailModal: React.FC<{ whiskey: Whiskey | null; onClose: () => voi
                 )}
 
                 {similarLoading && <LoadingSpinner />}
-                {similarError && <p className="text-red-500 text-sm mt-4">{similarError}</p>}
+                {similarError && <p className="text-red-500 text-sm mt-4 text-center">{similarError}</p>}
                 {similarWhiskies.length > 0 && (
-                    <div className="mt-6">
-                        <h3 className="text-xl font-semibold text-gray-800 mb-3">유사한 위스키</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="mt-8">
+                        <h3 className="text-xl font-semibold text-stone-800 mb-4">유사한 위스키</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                             {similarWhiskies.map(simWhiskey => (
                                 <WhiskeyCard key={simWhiskey.id} whiskey={simWhiskey} onClick={onClose} />
                             ))}
@@ -583,19 +626,19 @@ const App: React.FC = () => {
     const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [currentUserId, setCurrentUserId] = useState<string>('user001');
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null); // 로그인 상태에 따라 null 또는 string
+    const [loggedInUser, setLoggedInUser] = useState<User | null>(null); // 로그인된 사용자 객체
 
-    const [activeTab, setActiveTab] = useState<'recommend' | 'preferences' | 'evaluated' | 'recent' | 'all' | 'detail'>('recommend');
+    const [activeTab, setActiveTab] = useState<'login' | 'register' | 'recommend' | 'preferences' | 'evaluated' | 'recent' | 'all' | 'detail'>('login'); // 초기 탭을 로그인으로 설정
 
     const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
     const [evaluatedWhiskies, setEvaluatedWhiskies] = useState<{ whiskey: Whiskey; tastingNote: TastingNote }[]>([]);
     const [recentViews, setRecentViews] = useState<{ whiskey: Whiskey; viewedAt: number }[]>([]);
     const [allWhiskies, setAllWhiskies] = useState<Whiskey[]>([]);
     const [filteredWhiskies, setFilteredWhiskies] = useState<Whiskey[]>([]);
-    // 전체 위스키 목록 필터링을 위한 상태
     const [allWhiskeyFilterOptions, setAllWhiskeyFilterOptions] = useState<WhiskeyFilterOptions>({
-        minPrice: 0, // 초기 최소 가격
-        maxPrice: 500000 // 초기 최대 가격
+        minPrice: 0,
+        maxPrice: 500000
     });
     const [sortBy, setSortBy] = useState<WhiskeySortBy>('name');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -606,43 +649,67 @@ const App: React.FC = () => {
     const [smokinessPref, setSmokinessPref] = useState(3);
     const [sweetnessPref, setSweetnessPref] = useState(3);
     const [minPricePref, setMinPricePref] = useState<number>(0);
-    const [maxPricePref, setMaxPricePref] = useState<number>(500000); // 데모용 최대값 설정
+    const [maxPricePref, setMaxPricePref] = useState<number>(500000);
     const [flavorKeywordsInput, setFlavorKeywordsInput] = useState<string>('');
 
     const [prefSaveLoading, setPrefSaveLoading] = useState(false);
     const [prefSaveError, setPrefSaveError] = useState<string | null>(null);
 
+    // 회원가입/로그인 폼 상태
+    const [authUsername, setAuthUsername] = useState('');
+    const [authPassword, setAuthPassword] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+    const [authError, setAuthError] = useState<string | null>(null);
+
     // 사이드바 상태
     const [showFilterSidebar, setShowFilterSidebar] = useState(false);
 
+    // 사용자 데이터 로드 (로그인 시 또는 초기 로드 시)
     useEffect(() => {
-        const user = dbService.getUserById(currentUserId);
-        if (user) {
-            setUserPreferences(user.preferences);
-            setBodyPref(user.preferences.bodyPreference);
-            setRichnessPref(user.preferences.richnessPreference);
-            setSmokinessPref(user.preferences.smokinessPreference);
-            setSweetnessPref(user.preferences.sweetnessPreference);
-            setMinPricePref(user.preferences.minPreferredPrice || 0);
-            setMaxPricePref(user.preferences.maxPreferredPrice || 500000);
-            setFlavorKeywordsInput(user.preferences.flavorKeywords.join(', '));
+        if (loggedInUser) {
+            setCurrentUserId(loggedInUser.id);
+            setUserPreferences(loggedInUser.preferences);
+            setBodyPref(loggedInUser.preferences.bodyPreference);
+            setRichnessPref(loggedInUser.preferences.richnessPreference);
+            setSmokinessPref(loggedInUser.preferences.smokinessPreference);
+            setSweetnessPref(loggedInUser.preferences.sweetnessPreference);
+            setMinPricePref(loggedInUser.preferences.minPreferredPrice || 0);
+            setMaxPricePref(loggedInUser.preferences.maxPreferredPrice || 500000);
+            setFlavorKeywordsInput(loggedInUser.preferences.flavorKeywords.join(', '));
+            // 로그인 후 기본 탭을 추천으로 변경
+            setActiveTab('recommend');
+            setError(null); // 로그인 성공 시 기존 오류 메시지 제거
+        } else {
+            setCurrentUserId(null); // 로그아웃 상태
+            setUserPreferences(null);
+            // 모든 탭의 데이터 초기화 (선택 사항)
+            setEvaluatedWhiskies([]);
+            setRecentViews([]);
+            setAllWhiskies([]);
+            setFilteredWhiskies([]);
+            setRecommendations([]);
+            setActiveTab('login'); // 로그아웃 시 로그인 탭으로 이동
         }
-    }, [currentUserId]);
+    }, [loggedInUser]);
 
     const fetchDataForTab = useCallback(async (tab: string) => {
         setLoading(true);
         setError(null);
+        if (!currentUserId && tab !== 'login' && tab !== 'register') {
+            setError('로그인이 필요합니다.');
+            setLoading(false);
+            return;
+        }
         try {
             if (tab === 'evaluated') {
-                const data = await oktongService.getEvaluatedWhiskeys(currentUserId);
+                const data = await oktongService.getEvaluatedWhiskeys(currentUserId!);
                 setEvaluatedWhiskies(data);
             } else if (tab === 'recent') {
-                const data = await oktongService.getRecentlyViewedWhiskeys(currentUserId);
+                const data = await oktongService.getRecentlyViewedWhiskeys(currentUserId!);
                 setRecentViews(data);
             } else if (tab === 'all') {
                 const data = await oktongService.getAllWhiskies();
                 setAllWhiskies(data);
-                // 초기 필터 적용 (사이드바 상태와 동기화)
                 const initialFiltered = await oktongService.filterWhiskies(data, allWhiskeyFilterOptions);
                 setFilteredWhiskies(initialFiltered);
             }
@@ -651,15 +718,105 @@ const App: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentUserId, allWhiskeyFilterOptions]); // allWhiskeyFilterOptions를 의존성 배열에 추가
+    }, [currentUserId, allWhiskeyFilterOptions]);
 
     useEffect(() => {
         fetchDataForTab(activeTab);
     }, [activeTab, fetchDataForTab]);
 
+    // --- 회원가입 및 로그인 핸들러 ---
+    const handleRegister = async () => {
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            if (!authUsername || !authPassword) {
+                throw new Error("사용자 이름과 비밀번호를 입력해주세요.");
+            }
+            const newUserId = `user${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            const newUser: User = {
+                id: newUserId,
+                username: authUsername,
+                password: authPassword, // 데모용: 평문 저장. 실제는 해싱 필수!
+                preferences: {
+                    bodyPreference: 3, richnessPreference: 3, smokinessPreference: 3, sweetnessPreference: 3,
+                    minPreferredPrice: 0, maxPreferredPrice: 500000, flavorKeywords: []
+                },
+                interactionHistory: { viewedWhiskeys: [], likedWhiskeys: [], dislikedWhiskeys: [], searches: [] },
+                evaluatedWhiskeyIds: []
+            };
+            dbService.registerUser(newUser);
+            setAuthUsername('');
+            setAuthPassword('');
+            alert("회원가입이 완료되었습니다! 로그인해 주세요.");
+            setActiveTab('login'); // 회원가입 후 로그인 탭으로 이동
+        } catch (err: any) {
+            setAuthError(err.message);
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleLogin = async () => {
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            if (!authUsername || !authPassword) {
+                throw new Error("사용자 이름과 비밀번호를 입력해주세요.");
+            }
+            const user = dbService.findUserByUsername(authUsername);
+            if (!user || user.password !== authPassword) { // 데모용: 평문 비밀번호 비교
+                throw new Error("사용자 이름 또는 비밀번호가 올바르지 않습니다.");
+            }
+            setLoggedInUser(user);
+            setAuthUsername('');
+            setAuthPassword('');
+            alert(`환영합니다, ${user.username}님!`);
+        } catch (err: any) {
+            setAuthError(err.message);
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        setLoggedInUser(null);
+        alert("로그아웃되었습니다.");
+    };
+    // --- 회원가입 및 로그인 핸들러 끝 ---
+
+
+    const handleDeleteEvaluatedWhiskey = async (tastingNoteId: string) => {
+        if (!currentUserId) {
+            setError('로그인이 필요합니다.');
+            return;
+        }
+        if (window.confirm('정말로 이 평가 노트를 삭제하시겠습니까?')) { // 실제 앱에서는 커스텀 모달 사용 권장
+            setLoading(true);
+            setError(null);
+            try {
+                const success = await oktongService.deleteEvaluatedWhiskey(currentUserId, tastingNoteId);
+                if (success) {
+                    alert('평가 노트가 삭제되었습니다.');
+                    fetchDataForTab('evaluated'); // 목록 새로고침
+                } else {
+                    throw new Error('평가 노트 삭제 실패');
+                }
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+
     const handleRecommend = async () => {
         if (!userQuery.trim()) {
             setError('추천받고 싶은 내용을 입력해주세요.');
+            return;
+        }
+        if (!currentUserId) { // 로그인 여부 확인
+            setError('추천을 받으려면 로그인해야 합니다.');
             return;
         }
         setLoading(true);
@@ -691,6 +848,11 @@ const App: React.FC = () => {
     const handleSavePreferences = async () => {
         setPrefSaveLoading(true);
         setPrefSaveError(null);
+        if (!currentUserId) { // 로그인 여부 확인
+            setPrefSaveError('취향을 저장하려면 로그인해야 합니다.');
+            setPrefSaveLoading(false);
+            return;
+        }
         try {
             const preferences: UserPreferences = {
                 bodyPreference: bodyPref,
@@ -709,6 +871,8 @@ const App: React.FC = () => {
             const updatedUser = await oktongService.saveUserPreferences(currentUserId, preferences);
             if (updatedUser) {
                 setUserPreferences(updatedUser.preferences);
+                // 로그인된 사용자 객체도 업데이트 (선호도 변경 반영)
+                setLoggedInUser(prev => prev ? { ...prev, preferences: updatedUser.preferences } : null);
                 alert('취향 정보가 성공적으로 저장되었습니다!');
             } else {
                 throw new Error("취향 정보 저장 실패: 사용자 업데이트 오류");
@@ -720,7 +884,6 @@ const App: React.FC = () => {
         }
     };
 
-    // 사이드바에서 필터/정렬 적용 버튼 클릭 시
     const handleApplyFilterAndSort = async () => {
         setLoading(true);
         setError(null);
@@ -741,6 +904,11 @@ const App: React.FC = () => {
     const handleViewDetails = async (whiskeyId: string) => {
         setLoading(true);
         setError(null);
+        if (!currentUserId) { // 로그인 여부 확인
+            setError('상세 정보를 보려면 로그인해야 합니다.');
+            setLoading(false);
+            return;
+        }
         try {
             const details = await oktongService.getWhiskeyDetails(whiskeyId, currentUserId);
             setDetailWhiskey(details);
@@ -757,25 +925,25 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 p-4 font-sans text-gray-800 flex">
+        <div className="min-h-screen bg-gradient-to-br from-stone-100 to-stone-300 p-4 font-sans text-stone-800 flex"> {/* 배경색 변경 */}
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <script src="https://cdn.tailwindcss.com"></script>
 
             {/* 사이드바 */}
-            <div className={`fixed top-0 left-0 h-full bg-gray-50 shadow-lg p-6 transform transition-transform duration-300 ease-in-out z-40
-                        ${showFilterSidebar ? 'translate-x-0' : '-translate-x-full'} w-80 overflow-y-auto`}>
-                <button onClick={() => setShowFilterSidebar(false)} className="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-2xl font-bold">
+            <div className={`fixed top-0 left-0 h-full bg-stone-900 text-stone-100 shadow-lg p-6 transform transition-transform duration-300 ease-in-out z-40
+                        ${showFilterSidebar ? 'translate-x-0' : '-translate-x-full'} w-80 overflow-y-auto rounded-r-xl`}> {/* 어두운 배경, 둥근 모서리 */}
+                <button onClick={() => setShowFilterSidebar(false)} className="absolute top-4 right-4 text-stone-300 hover:text-white text-3xl font-bold">
                     &times;
                 </button>
-                <h2 className="text-2xl font-bold text-indigo-600 mb-6">필터 및 정렬</h2>
+                <h2 className="text-3xl font-bold text-amber-400 mb-8 mt-4">필터 및 정렬</h2> {/* 강조 색상 */}
 
-                <div className="mb-6">
-                    <h3 className="text-xl font-semibold mb-3 text-gray-700">필터링</h3>
+                <div className="mb-8 p-4 bg-stone-800 rounded-lg shadow-inner"> {/* 섹션 배경 */}
+                    <h3 className="text-xl font-semibold mb-4 text-stone-200">필터링</h3>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">종류:</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">종류:</label>
                             <select value={allWhiskeyFilterOptions.type || ''} onChange={(e) => setAllWhiskeyFilterOptions({ ...allWhiskeyFilterOptions, type: e.target.value as Whiskey['type'] })}
-                                className="w-full p-2 border rounded-md">
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white focus:ring-amber-500 focus:border-amber-500">
                                 <option value="">모두</option>
                                 <option value="싱글 몰트">싱글 몰트</option>
                                 <option value="블렌디드">블렌디드</option>
@@ -784,46 +952,45 @@ const App: React.FC = () => {
                                 <option value="기타">기타</option>
                             </select>
                         </div>
-                        {/* 가격대 카테고리 필터 제거 */}
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">최소 가격 (원):</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">최소 가격 (원):</label>
                             <input type="number" min="0" value={allWhiskeyFilterOptions.minPrice || ''} onChange={(e) => setAllWhiskeyFilterOptions({ ...allWhiskeyFilterOptions, minPrice: parseInt(e.target.value) || undefined })}
-                                className="w-full p-2 border rounded-md" placeholder="0" />
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white placeholder-stone-400 focus:ring-amber-500 focus:border-amber-500" placeholder="0" />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">최대 가격 (원):</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">최대 가격 (원):</label>
                             <input type="number" min="0" value={allWhiskeyFilterOptions.maxPrice || ''} onChange={(e) => setAllWhiskeyFilterOptions({ ...allWhiskeyFilterOptions, maxPrice: parseInt(e.target.value) || undefined })}
-                                className="w-full p-2 border rounded-md" placeholder="500000" />
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white placeholder-stone-400 focus:ring-amber-500 focus:border-amber-500" placeholder="500000" />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">생산 국가:</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">생산 국가:</label>
                             <input type="text" value={allWhiskeyFilterOptions.country || ''} onChange={(e) => setAllWhiskeyFilterOptions({ ...allWhiskeyFilterOptions, country: e.target.value })}
-                                className="w-full p-2 border rounded-md" placeholder="예: 스코틀랜드" />
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white placeholder-stone-400 focus:ring-amber-500 focus:border-amber-500" placeholder="예: 스코틀랜드" />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">맛/향 키워드:</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">맛/향 키워드:</label>
                             <input type="text" value={allWhiskeyFilterOptions.flavorKeywords?.join(', ') || ''} onChange={(e) => setAllWhiskeyFilterOptions({ ...allWhiskeyFilterOptions, flavorKeywords: e.target.value.split(',').map(s => s.trim()).filter(s => s !== '') })}
-                                className="w-full p-2 border rounded-md" placeholder="예: 피트, 바닐라" />
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white placeholder-stone-400 focus:ring-amber-500 focus:border-amber-500" placeholder="예: 피트, 바닐라" />
                         </div>
                     </div>
                 </div>
 
-                <div className="mb-6">
-                    <h3 className="text-xl font-semibold mb-3 text-gray-700">정렬</h3>
+                <div className="mb-8 p-4 bg-stone-800 rounded-lg shadow-inner"> {/* 섹션 배경 */}
+                    <h3 className="text-xl font-semibold mb-4 text-stone-200">정렬</h3>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">정렬 기준:</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">정렬 기준:</label>
                             <select value={sortBy} onChange={(e) => setSortBy(e.target.value as WhiskeySortBy)}
-                                className="w-full p-2 border rounded-md">
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white focus:ring-amber-500 focus:border-amber-500">
                                 <option value="name">이름</option>
                                 <option value="price">가격</option>
                                 <option value="age">숙성 연수</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">정렬 순서:</label>
+                            <label className="block text-stone-300 text-sm font-bold mb-1">정렬 순서:</label>
                             <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-                                className="w-full p-2 border rounded-md">
+                                className="w-full p-2 border border-stone-600 rounded-lg bg-stone-700 text-white focus:ring-amber-500 focus:border-amber-500">
                                 <option value="asc">오름차순</option>
                                 <option value="desc">내림차순</option>
                             </select>
@@ -831,225 +998,365 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                <button onClick={handleApplyFilterAndSort} className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-md">
+                <button onClick={handleApplyFilterAndSort} className="w-full bg-amber-500 text-stone-900 font-bold py-3 px-4 rounded-lg hover:bg-amber-400 transition-colors shadow-lg transform hover:scale-105">
                     필터 및 정렬 적용
                 </button>
             </div>
 
             {/* 메인 콘텐츠 영역 */}
-            <div className={`flex-1 transition-all duration-300 ease-in-out ${showFilterSidebar ? 'ml-80' : 'ml-0'}`}>
-                <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl p-6 md:p-8">
-                    <h1 className="text-3xl font-bold text-center text-indigo-700 mb-6">
-                        🥃 Oktong 위스키 추천 데모 시스템 🥃
-                    </h1>
-
-                    <div className="flex justify-center border-b border-gray-200 mb-6">
-                        <button
-                            className={`py-2 px-4 text-lg font-medium ${activeTab === 'recommend' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}
-                            onClick={() => setActiveTab('recommend')}
-                        >
-                            위스키 추천받기
-                        </button>
-                        <button
-                            className={`py-2 px-4 text-lg font-medium ${activeTab === 'preferences' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}
-                            onClick={() => setActiveTab('preferences')}
-                        >
-                            위스키 취향 입력
-                        </button>
-                        <button
-                            className={`py-2 px-4 text-lg font-medium ${activeTab === 'evaluated' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}
-                            onClick={() => setActiveTab('evaluated')}
-                        >
-                            내가 평가한 위스키
-                        </button>
-                        <button
-                            className={`py-2 px-4 text-lg font-medium ${activeTab === 'recent' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}
-                            onClick={() => setActiveTab('recent')}
-                        >
-                            최근 본 위스키
-                        </button>
-                        <button
-                            className={`py-2 px-4 text-lg font-medium ${activeTab === 'all' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}
-                            onClick={() => setActiveTab('all')}
-                        >
-                            전체 위스키 목록
-                        </button>
+            <div className={`flex-1 transition-all duration-300 ease-in-out ${showFilterSidebar ? 'md:ml-80' : 'md:ml-0'} p-4 md:p-8`}> {/* 반응형 마진 */}
+                <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl p-6 md:p-8 border border-stone-200"> {/* 메인 컨테이너 테두리 */}
+                    {/* 상단 헤더: 환영 메시지 (좌상단) 및 로그아웃 버튼 (우상단) */}
+                    <div className="relative w-full mb-8">
+                        {loggedInUser && (
+                            <>
+                                <span className="absolute top-0 left-0 text-stone-800 text-xl font-bold">환영합니다, {loggedInUser.username}님!</span>
+                                <button
+                                    onClick={handleLogout}
+                                    className="absolute top-0 right-0 bg-red-600 text-white px-4 py-2 rounded-lg text-base font-semibold hover:bg-red-700 transition-colors shadow-md transform hover:scale-105"
+                                >
+                                    로그아웃
+                                </button>
+                            </>
+                        )}
+                        <h1 className="text-5xl font-extrabold text-amber-800 tracking-tight text-center mt-8"> {/* 제목 중앙 정렬 */}
+                            🥃 Oktong 🥃
+                        </h1>
                     </div>
+
+                    {/* 메인 내비게이션 탭 (일렬 정렬) */}
+                    {loggedInUser && (
+                        <div className="flex flex-wrap justify-center space-x-2 md:space-x-4 border-b border-stone-200 pb-4 mb-6"> {/* 일렬 정렬 및 간격 */}
+                            <button
+                                className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
+                                            ${activeTab === 'recommend' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                                onClick={() => setActiveTab('recommend')}
+                            >
+                                위스키 추천받기
+                            </button>
+                            <button
+                                className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
+                                            ${activeTab === 'preferences' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                                onClick={() => setActiveTab('preferences')}
+                            >
+                                위스키 취향 입력
+                            </button>
+                            <button
+                                className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
+                                            ${activeTab === 'evaluated' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                                onClick={() => setActiveTab('evaluated')}
+                            >
+                                내가 평가한 위스키
+                            </button>
+                            <button
+                                className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
+                                            ${activeTab === 'recent' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                                onClick={() => setActiveTab('recent')}
+                            >
+                                최근 본 위스키
+                            </button>
+                            <button
+                                className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
+                                            ${activeTab === 'all' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                                onClick={() => setActiveTab('all')}
+                            >
+                                전체 위스키 목록
+                            </button>
+                        </div>
+                    )}
 
                     {loading && <LoadingSpinner />}
                     {error && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 font-semibold text-center">
                             <strong className="font-bold">오류!</strong>
                             <span className="block sm:inline"> {error}</span>
                         </div>
                     )}
-
-                    {activeTab === 'recommend' && (
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-indigo-600 mb-4">AI 위스키 추천받기</h2>
-                            <textarea
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-y min-h-[80px]"
-                                placeholder="어떤 위스키를 찾으시나요? (예: '부드럽고 달콤한 위스키 추천해줘', '피트향 강한 싱글몰트 10만원 이하로 찾아줘')"
-                                value={userQuery}
-                                onChange={(e) => setUserQuery(e.target.value)}
-                                rows={3}
-                            ></textarea>
-                            <button
-                                onClick={handleRecommend}
-                                className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg mt-3 hover:bg-indigo-700 transition-colors duration-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={loading}
-                            >
-                                {loading ? '추천 중...' : '위스키 추천받기'}
-                            </button>
-
-                            {recommendations.length > 0 && (
-                                <div className="mt-8">
-                                    <h3 className="text-xl font-bold text-indigo-600 mb-5 text-center">✨ 추천 위스키 ✨</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {recommendations.map((rec, index) => (
-                                            <WhiskeyCard key={index} whiskey={rec.whiskey} showReason reason={rec.reason} onClick={handleViewDetails} />
-                                        ))}
-                                    </div>
-                                    <p className="text-center text-gray-500 text-sm mt-6">
-                                        추천 결과에 대한 피드백을 주시면 더 정확한 추천을 제공해 드릴 수 있습니다.
-                                    </p>
-                                </div>
-                            )}
+                    {authError && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 font-semibold text-center">
+                            <strong className="font-bold">인증 오류!</strong>
+                            <span className="block sm:inline"> {authError}</span>
                         </div>
                     )}
 
-                    {activeTab === 'preferences' && (
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-indigo-600 mb-4">위스키 취향 입력</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">바디감 (0-5):</label>
-                                    <input type="range" min="0" max="5" value={bodyPref} onChange={(e) => setBodyPref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{bodyPref}</span>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">풍미 (0-5):</label>
-                                    <input type="range" min="0" max="5" value={richnessPref} onChange={(e) => setRichnessPref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{richnessPref}</span>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">스모키함 (0-5):</label>
-                                    <input type="range" min="0" max="5" value={smokinessPref} onChange={(e) => setSmokinessPref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{smokinessPref}</span>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">단맛 (0-5):</label>
-                                    <input type="range" min="0" max="5" value={sweetnessPref} onChange={(e) => setSweetnessPref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{sweetnessPref}</span>
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">선호 최소 가격 (원):</label>
-                                    <input type="range" min="0" max="500000" step="10000" value={minPricePref} onChange={(e) => setMinPricePref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{minPricePref.toLocaleString()}원</span>
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">선호 최대 가격 (원):</label>
-                                    <input type="range" min="0" max="500000" step="10000" value={maxPricePref} onChange={(e) => setMaxPricePref(parseInt(e.target.value))} className="w-full" />
-                                    <span className="text-gray-600">{maxPricePref.toLocaleString()}원</span>
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-1">선호 맛/향 키워드 (쉼표로 구분):</label>
-                                    <textarea
-                                        value={flavorKeywordsInput}
-                                        onChange={(e) => setFlavorKeywordsInput(e.target.value)}
-                                        className="w-full p-2 border rounded-md resize-y min-h-[60px]"
-                                        placeholder="예: 피트, 스모키, 바닐라, 꿀"
-                                    ></textarea>
-                                </div>
+
+                    {/* 로그인 탭 */}
+                    {activeTab === 'login' && !loggedInUser && (
+                        <div className="mb-6 max-w-md mx-auto p-8 bg-white rounded-xl shadow-lg border border-stone-200"> {/* 테두리 색상 */}
+                            <h2 className="text-3xl font-bold text-amber-700 mb-6 text-center">로그인</h2> {/* 제목 색상 */}
+                            <div className="mb-4">
+                                <label className="block text-stone-700 text-sm font-semibold mb-2" htmlFor="login-username"> {/* 텍스트 색상 */}
+                                    사용자 이름
+                                </label>
+                                <input
+                                    type="text"
+                                    id="login-username"
+                                    className="appearance-none border border-stone-300 rounded-lg w-full py-3 px-4 text-stone-700 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all" /* 테두리, 텍스트, 포커스 색상 */
+                                    value={authUsername}
+                                    onChange={(e) => setAuthUsername(e.target.value)}
+                                    disabled={authLoading}
+                                    placeholder="사용자 이름을 입력하세요"
+                                />
                             </div>
-                            {prefSaveError && <p className="text-red-500 text-sm mt-3">{prefSaveError}</p>}
-                            <button
-                                onClick={handleSavePreferences}
-                                className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg mt-6 hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50"
-                                disabled={prefSaveLoading}
-                            >
-                                {prefSaveLoading ? '저장 중...' : '취향 저장'}
-                            </button>
-                        </div>
-                    )}
-
-                    {activeTab === 'evaluated' && (
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-indigo-600 mb-4">내가 평가한 위스키</h2>
-                            {evaluatedWhiskies.length === 0 ? (
-                                <p className="text-gray-600">아직 평가한 위스키가 없습니다.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {evaluatedWhiskies.map((item, index) => (
-                                        <div key={index} className="bg-white rounded-lg shadow-md p-4 m-2 border border-gray-200">
-                                            <WhiskeyCard whiskey={item.whiskey} onClick={handleViewDetails} />
-                                            <div className="mt-3 text-sm text-gray-700">
-                                                <p><strong>총점:</strong> {item.tastingNote.rating}/5</p>
-                                                <p><strong>바디감:</strong> {item.tastingNote.bodyRating}/5</p>
-                                                <p><strong>풍미:</strong> {item.tastingNote.richnessRating}/5</p>
-                                                <p><strong>스모키함:</strong> {item.tastingNote.smokinessRating}/5</p>
-                                                <p><strong>단맛:</strong> {item.tastingNote.sweetnessRating}/5</p>
-                                                <p><strong>코멘트:</strong> {item.tastingNote.reviewText}</p>
-                                                <p className="text-xs text-gray-500 mt-1">작성일: {new Date(item.tastingNote.createdAt).toLocaleDateString()}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === 'recent' && (
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-indigo-600 mb-4">최근 본 위스키</h2>
-                            {recentViews.length === 0 ? (
-                                <p className="text-gray-600">최근 조회한 위스키가 없습니다.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {recentViews.map((item, index) => (
-                                        <div key={index} className="bg-white rounded-lg shadow-md p-4 m-2 border border-gray-200">
-                                            <WhiskeyCard whiskey={item.whiskey} onClick={handleViewDetails} />
-                                            <p className="text-xs text-gray-500 mt-2">조회 시간: {new Date(item.viewedAt).toLocaleString()}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === 'all' && (
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-indigo-600 mb-4 flex items-center">
-                                전체 위스키 목록
+                            <div className="mb-6">
+                                <label className="block text-stone-700 text-sm font-semibold mb-2" htmlFor="login-password"> {/* 텍스트 색상 */}
+                                    비밀번호
+                                </label>
+                                <input
+                                    type="password"
+                                    id="login-password"
+                                    className="appearance-none border border-stone-300 rounded-lg w-full py-3 px-4 text-stone-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all" /* 테두리, 텍스트, 포커스 색상 */
+                                    value={authPassword}
+                                    onChange={(e) => setAuthPassword(e.target.value)}
+                                    disabled={authLoading}
+                                    placeholder="비밀번호를 입력하세요"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
                                 <button
-                                    onClick={() => setShowFilterSidebar(true)}
-                                    className="ml-4 bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-base hover:bg-gray-300 transition-colors shadow-sm"
+                                    onClick={handleLogin}
+                                    className="bg-amber-700 hover:bg-amber-800 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full text-lg transform hover:scale-105 transition-transform shadow-md" /* 색상 변경 */
+                                    disabled={authLoading}
                                 >
-                                    필터/정렬 열기
+                                    {authLoading ? '로그인 중...' : '로그인'}
                                 </button>
-                            </h2>
-
-                            {filteredWhiskies.length === 0 ? (
-                                <p className="text-gray-600">위스키 목록이 비어 있거나 필터링/정렬 조건에 맞는 위스키가 없습니다.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {filteredWhiskies.map((whiskey) => (
-                                        <WhiskeyCard key={whiskey.id} whiskey={whiskey} onClick={handleViewDetails} />
-                                    ))}
-                                </div>
-                            )}
+                            </div>
+                            <p className="text-center text-stone-600 text-sm mt-6"> {/* 텍스트 색상 */}
+                                계정이 없으신가요? <button onClick={() => setActiveTab('register')} className="text-amber-700 font-semibold hover:underline">회원가입</button> {/* 링크 색상 */}
+                            </p>
+                            <p className="text-center text-stone-500 text-xs mt-2"> {/* 텍스트 색상 */}
+                                (테스트 계정: user001 / password123)
+                            </p>
                         </div>
                     )}
+
+                    {/* 회원가입 탭 */}
+                    {activeTab === 'register' && !loggedInUser && (
+                        <div className="mb-6 max-w-md mx-auto p-8 bg-white rounded-xl shadow-lg border border-stone-200"> {/* 테두리 색상 */}
+                            <h2 className="text-3xl font-bold text-amber-700 mb-6 text-center">회원가입</h2> {/* 제목 색상 */}
+                            <div className="mb-4">
+                                <label className="block text-stone-700 text-sm font-semibold mb-2" htmlFor="register-username"> {/* 텍스트 색상 */}
+                                    사용자 이름 (ID)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="register-username"
+                                    className="appearance-none border border-stone-300 rounded-lg w-full py-3 px-4 text-stone-700 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all" /* 테두리, 텍스트, 포커스 색상 */
+                                    value={authUsername}
+                                    onChange={(e) => setAuthUsername(e.target.value)}
+                                    disabled={authLoading}
+                                    placeholder="사용할 사용자 이름을 입력하세요"
+                                />
+                            </div>
+                            <div className="mb-6">
+                                <label className="block text-stone-700 text-sm font-semibold mb-2" htmlFor="register-password"> {/* 텍스트 색상 */}
+                                    비밀번호
+                                </label>
+                                <input
+                                    type="password"
+                                    id="register-password"
+                                    className="appearance-none border border-stone-300 rounded-lg w-full py-3 px-4 text-stone-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all" /* 테두리, 텍스트, 포커스 색상 */
+                                    value={authPassword}
+                                    onChange={(e) => setAuthPassword(e.target.value)}
+                                    disabled={authLoading}
+                                    placeholder="비밀번호를 입력하세요"
+                                />
+                                <p className="text-red-500 text-xs italic mt-1">
+                                    **경고: 데모 앱에서는 비밀번호가 평문으로 저장됩니다. 실제 서비스에서는 반드시 암호화해야 합니다.**
+                                </p>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <button
+                                    onClick={handleRegister}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full text-lg transform hover:scale-105 transition-transform shadow-md" /* 색상 변경 */
+                                    disabled={authLoading}
+                                >
+                                    {authLoading ? '회원가입 중...' : '회원가입'}
+                                </button>
+                            </div>
+                            <p className="text-center text-stone-600 text-sm mt-6"> {/* 텍스트 색상 */}
+                                이미 계정이 있으신가요? <button onClick={() => setActiveTab('login')} className="text-amber-700 font-semibold hover:underline">로그인</button> {/* 링크 색상 */}
+                            </p>
+                        </div>
+                    )}
+
+
+                    {loggedInUser && ( // 로그인된 사용자에게만 기능 탭 표시
+                        <>
+                            {activeTab === 'recommend' && (
+                                <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border border-stone-200"> {/* 테두리 색상 */}
+                                    <h2 className="text-2xl font-bold text-amber-700 mb-4">AI 위스키 추천받기</h2> {/* 제목 색상 */}
+                                    <textarea
+                                        className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y min-h-[80px] transition-all text-stone-700" /* 테두리, 포커스, 텍스트 색상 */
+                                        placeholder="어떤 위스키를 찾으시나요? (예: '부드럽고 달콤한 위스키 추천해줘', '피트향 강한 싱글몰트 10만원 이하로 찾아줘')"
+                                        value={userQuery}
+                                        onChange={(e) => setUserQuery(e.target.value)}
+                                        rows={3}
+                                    ></textarea>
+                                    <button
+                                        onClick={handleRecommend}
+                                        className="w-full bg-amber-700 text-white font-semibold py-3 px-4 rounded-lg mt-3 hover:bg-amber-800 transition-colors duration-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105" /* 색상 변경 */
+                                        disabled={loading}
+                                    >
+                                        {loading ? '추천 중...' : '위스키 추천받기'}
+                                    </button>
+
+                                    {recommendations.length > 0 && (
+                                        <div className="mt-8">
+                                            <h3 className="text-xl font-bold text-amber-700 mb-5 text-center">✨ 추천 위스키 ✨</h3> {/* 제목 색상 */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {recommendations.map((rec, index) => (
+                                                    <WhiskeyCard key={index} whiskey={rec.whiskey} showReason reason={rec.reason} onClick={handleViewDetails} />
+                                                ))}
+                                            </div>
+                                            <p className="text-center text-stone-600 text-sm mt-6"> {/* 텍스트 색상 */}
+                                                추천 결과에 대한 피드백을 주시면 더 정확한 추천을 제공해 드릴 수 있습니다.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'preferences' && (
+                                <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border border-stone-200">
+                                    <h2 className="text-2xl font-bold text-amber-700 mb-4">위스키 취향 입력</h2> {/* 제목 색상 */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="col-span-1">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">바디감 (0-5):</label> {/* 텍스트 색상 */}
+                                            <input type="range" min="0" max="5" value={bodyPref} onChange={(e) => setBodyPref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" /> {/* 슬라이더 색상 */}
+                                            <span className="text-stone-600 text-sm">{bodyPref}</span> {/* 텍스트 색상 */}
+                                        </div>
+                                        <div className="col-span-1">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">풍미 (0-5):</label>
+                                            <input type="range" min="0" max="5" value={richnessPref} onChange={(e) => setRichnessPref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" />
+                                            <span className="text-stone-600 text-sm">{richnessPref}</span>
+                                        </div>
+                                        <div className="col-span-1">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">스모키함 (0-5):</label>
+                                            <input type="range" min="0" max="5" value={smokinessPref} onChange={(e) => setSmokinessPref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" />
+                                            <span className="text-stone-600 text-sm">{smokinessPref}</span>
+                                        </div>
+                                        <div className="col-span-1">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">단맛 (0-5):</label>
+                                            <input type="range" min="0" max="5" value={sweetnessPref} onChange={(e) => setSweetnessPref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" />
+                                            <span className="text-stone-600 text-sm">{sweetnessPref}</span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">선호 최소 가격 (원):</label>
+                                            <input type="range" min="0" max="500000" step="10000" value={minPricePref} onChange={(e) => setMinPricePref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" />
+                                            <span className="text-stone-600 text-sm">{minPricePref.toLocaleString()}원</span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">선호 최대 가격 (원):</label>
+                                            <input type="range" min="0" max="500000" step="10000" value={maxPricePref} onChange={(e) => setMaxPricePref(parseInt(e.target.value))} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-600" />
+                                            <span className="text-stone-600 text-sm">{maxPricePref.toLocaleString()}원</span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-stone-700 text-sm font-bold mb-2">선호 맛/향 키워드 (쉼표로 구분):</label>
+                                            <textarea
+                                                value={flavorKeywordsInput}
+                                                onChange={(e) => setFlavorKeywordsInput(e.target.value)}
+                                                className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y min-h-[80px] transition-all text-stone-700"
+                                                placeholder="예: 피트, 스모키, 바닐라, 꿀"
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                    {prefSaveError && <p className="text-red-500 text-sm mt-3 text-center">{prefSaveError}</p>}
+                                    <button
+                                        onClick={handleSavePreferences}
+                                        className="w-full bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg mt-6 hover:bg-orange-700 transition-colors shadow-md disabled:opacity-50 transform hover:scale-105"
+                                        disabled={prefSaveLoading}
+                                    >
+                                        {prefSaveLoading ? '저장 중...' : '취향 저장'}
+                                    </button>
+                                </div>
+                            )}
+
+                            {activeTab === 'evaluated' && (
+                                <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border border-stone-200">
+                                    <h2 className="text-2xl font-bold text-amber-700 mb-4">내가 평가한 위스키</h2>
+                                    {evaluatedWhiskies.length === 0 ? (
+                                        <p className="text-stone-600 text-center py-4">아직 평가한 위스키가 없습니다.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {evaluatedWhiskies.map((item, index) => (
+                                                <div key={index} className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 hover:shadow-xl transition-shadow duration-300 transform hover:scale-105"> {/* 카드 디자인 강화 */}
+                                                    <WhiskeyCard whiskey={item.whiskey} onClick={handleViewDetails} />
+                                                    <div className="mt-3 text-sm text-stone-700 space-y-1">
+                                                        <p><strong>총점:</strong> <span className="font-semibold text-amber-700">{item.tastingNote.rating}</span>/5</p>
+                                                        <p><strong>바디감:</strong> {item.tastingNote.bodyRating}/5</p>
+                                                        <p><strong>풍미:</strong> {item.tastingNote.richnessRating}/5</p>
+                                                        <p><strong>스모키함:</strong> {item.tastingNote.smokinessRating}/5</p>
+                                                        <p><strong>단맛:</strong> {item.tastingNote.sweetnessRating}/5</p>
+                                                        <p className="mt-2"><strong>코멘트:</strong> <span className="italic text-stone-800">"{item.tastingNote.reviewText}"</span></p>
+                                                        <p className="text-xs text-stone-500 mt-2">작성일: {new Date(item.tastingNote.createdAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDeleteEvaluatedWhiskey(item.tastingNote.id)}
+                                                        className="mt-4 bg-red-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-red-600 transition-colors shadow-md w-full"
+                                                    >
+                                                        삭제
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'recent' && (
+                                <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border border-stone-200">
+                                    <h2 className="text-2xl font-bold text-amber-700 mb-4">최근 본 위스키</h2>
+                                    {recentViews.length === 0 ? (
+                                        <p className="text-stone-600 text-center py-4">최근 조회한 위스키가 없습니다.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {recentViews.map((item, index) => (
+                                                <div key={index} className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 hover:shadow-xl transition-shadow duration-300 transform hover:scale-105"> {/* 카드 디자인 강화 */}
+                                                    <WhiskeyCard whiskey={item.whiskey} onClick={handleViewDetails} />
+                                                    <p className="text-xs text-stone-500 mt-2 text-center">조회 시간: {new Date(item.viewedAt).toLocaleString()}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'all' && (
+                                <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border border-stone-200">
+                                    <h2 className="text-2xl font-bold text-amber-700 mb-4 flex items-center">
+                                        전체 위스키 목록
+                                        <button
+                                            onClick={() => setShowFilterSidebar(true)}
+                                            className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg text-base font-semibold hover:bg-amber-700 transition-colors shadow-md transform hover:scale-105"
+                                        >
+                                            필터/정렬 열기
+                                        </button>
+                                    </h2>
+
+                                    {filteredWhiskies.length === 0 ? (
+                                        <p className="text-stone-600 text-center py-4">위스키 목록이 비어 있거나 필터링/정렬 조건에 맞는 위스키가 없습니다.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {filteredWhiskies.map((whiskey) => (
+                                                <WhiskeyCard key={whiskey.id} whiskey={whiskey} onClick={handleViewDetails} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )} {/* 로그인된 사용자에게만 기능 탭 표시 끝 */}
 
                     <WhiskeyDetailModal
                         whiskey={detailWhiskey}
                         onClose={() => setDetailWhiskey(null)}
-                        userId={currentUserId}
+                        userId={currentUserId || 'anonymous'}
                         onTastingNoteSubmit={handleTastingNoteSubmitted}
                     />
 
-                    <div className="mt-8 text-center text-sm text-gray-500">
-                        현재 사용자 ID: <span className="font-mono">{currentUserId}</span>
+                    <div className="mt-8 text-center text-sm text-stone-600">
+                        현재 사용자 ID: <span className="font-mono font-semibold text-stone-800">{currentUserId || '로그아웃됨'}</span>
                     </div>
                 </div>
             </div>
