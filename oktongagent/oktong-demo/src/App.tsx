@@ -705,7 +705,7 @@ const App: React.FC = () => {
                 const data = await oktongService.getEvaluatedWhiskeys(currentUserId!);
                 setEvaluatedWhiskies(data);
             } else if (tab === 'recent') {
-                const data = await oktongService.getRecentlyViewedWhiskeys(currentUserId!);
+                const data = await oktongService.getRecentlyViewedWhiskies(currentUserId!); // 오타 수정
                 setRecentViews(data);
             } else if (tab === 'all') {
                 const data = await oktongService.getAllWhiskies();
@@ -1019,14 +1019,14 @@ const App: React.FC = () => {
                                 </button>
                             </>
                         )}
-                        <h1 className="text-5xl font-extrabold text-amber-800 tracking-tight text-center mt-8"> {/* 제목 중앙 정렬 */}
+                        <h1 className="text-5xl font-extrabold text-amber-800 tracking-tight text-center mt-8">
                             🥃 Oktong 🥃
                         </h1>
                     </div>
 
                     {/* 메인 내비게이션 탭 (일렬 정렬) */}
                     {loggedInUser && (
-                        <div className="flex flex-wrap justify-center space-x-2 md:space-x-4 border-b border-stone-200 pb-4 mb-6"> {/* 일렬 정렬 및 간격 */}
+                        <div className="flex flex-wrap justify-center space-x-2 md:space-x-4 border-b border-stone-200 pb-4 mb-6">
                             <button
                                 className={`py-2 px-4 rounded-lg text-lg font-medium transition-colors duration-200 shadow-md
                                             ${activeTab === 'recommend' ? 'bg-amber-700 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
